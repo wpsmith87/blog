@@ -5,12 +5,26 @@
             <li>
                 {{ entry.datetime | dateformat("%d/%m/%y") }}
             </li>
+             <li>
+                <a href="{{ url_for('edit_post_get', id=entry.id) }}">
+                    Edit
+                </a>
+             </li>
+              <li>
+               <a href="{{ url_for('delete_entry_page', id=entry.id) }}">
+                   Delete
+               </a>
+             </li>
         </ul>
     </div>
     <div class="col-md-10">
+
         <h1>
-            {{ entry.title }}
+          <a href="{{ url_for('blog_entry', id=entry.id) }}">
+              {{ entry.title }}
+          </a>
         </h1>
+        
         {{ entry.content | markdown }}
     </div>
 </div>

@@ -17,5 +17,8 @@
         </textarea>
     </div>
     <button type="submit" class="btn btn-default">Submit</button>
+    <a href="{{ url_for('blog_entry', id=entry.id) }}">
+   Cancel
+   </a>
 </form>
 {% endblock %}
