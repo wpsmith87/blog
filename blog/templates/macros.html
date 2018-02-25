@@ -5,6 +5,9 @@
             <li>
                 {{ entry.datetime | dateformat("%d/%m/%y") }}
             </li>
+            <li>
+                {{ entry.author.name | default('Anonymous') }}
+            </li>
              <li>
                 <a href="{{ url_for('edit_post_get', id=entry.id) }}">
                     Edit

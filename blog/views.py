@@ -1,12 +1,18 @@
-from flask import render_template, request, redirect, url_for
+from flask import render_template, request, redirect, url_for, flash
 
+from flask_login import login_user, login_required, current_user, logout_user
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.exceptions import Forbidden
+
+from .database import User, Entry, session
 from . import app
-from .database import session, Entry
+
+
 
 PAGINATE_BY = 10
 
-@app.route('/')
-@app.route('/page/<int:page>')
+@app.route("/")
+@app.route("/page/<int:page>")
 def entries(page=1):
     """
     Query the database entries of the blog.
@@ -21,7 +27,7 @@ def entries(page=1):
 
     # Set the number of entries displayed per page
     try:
-        entry_limit = int(request.args.get('limit', default_entries))  # Get the limit from HTML argument 'limit'
+        entry_limit = int(request.args.get("limit", default_entries))  # Get the limit from HTML argument 'limit'
         assert entry_limit > 0  # Ensure positive number
         assert entry_limit <= max_entries  # Ensure entries don't exceed max value
     except (ValueError, AssertionError):  # Use default value if number of entries doesn't meet expectations
@@ -41,7 +47,7 @@ def entries(page=1):
     entries = entries.order_by(Entry.datetime.desc())
     entries = entries[start:end]
 
-    return render_template('entries.html',
+    return render_template("entries.html",
                            entries=entries,
                            has_next=has_next,
                            has_prev=has_prev,
@@ -49,8 +55,12 @@ def entries(page=1):
                            total_pages=total_pages
                            )
                            
+
+#
+#  View Single Entry  #
+#
     
-@app.route('/entry/<int:id>')
+@app.route("/entry/<int:id>")
 def blog_entry(id):
     """
     Find a specific blog entry and display it.
@@ -58,9 +68,14 @@ def blog_entry(id):
     :return: Template page displaying the specified blog entry
     """
     entry = session.query(Entry).filter(Entry.id == id).one()  # Locate specific entry
-    return render_template('blog_entry.html', entry=entry)  # Show the entry
+    return render_template("blog_entry.html", entry=entry)  # Show the entry
 
-@app.route('/entry/<int:id>/edit', methods=['GET'])
+#
+#  Edit Entry  #
+#
+
+@app.route("/entry/<int:id>/edit", methods=['GET'])
+@login_required  # Force authentication
 def edit_post_get(id):
     """
     Find a specific entry for editing.
@@ -69,9 +84,14 @@ def edit_post_get(id):
     :return: Template page displaying the specified blog entry for modification
     """
     entry = session.query(Entry).filter(Entry.id == id).one()   # Locate specific entry
-    return render_template('edit_post.html', entry=entry)  # Show the entry
+    if not all([entry.author, current_user]) or entry.author.id != current_user.id:
+        flash("Only the author can edit.", "danger")
+        return redirect(url_for("entries"))
+        
+    return render_template("edit_post.html", entry=entry) # Edit entry
 
-@app.route('/entry/<int:id>/edit', methods=['POST'])
+@app.route("/entry/<int:id>/edit", methods=['POST'])
+@login_required  # Force authentication
 def edit_post_put(id, title=None, content=None):
     """
     Modify an existing blog entry.
@@ -82,36 +102,133 @@ def edit_post_put(id, title=None, content=None):
     :return: Default template page displaying all blog entries
     """
     entry = session.query(Entry).filter(Entry.id == id).one()  # Locate specific entry
+    
+    if not all([entry.author, current_user]) or entry.author.id != current_user.id:
+        flash('Only the author can edit.')
+        return render_template("blog_entry.html", entry=entry) # Show the entry
+        
     entry.title = request.form['title'],  # Update title
     entry.content = request.form["content"]  # Update entry content
     session.add(entry)  # Add modified entry to database
     session.commit()  # Update database
     return redirect(url_for('entries'))  # Return to entries page
 
-@app.route('/entry/add', methods=['GET'])
-def add_entry_get():
-    return render_template('add_entry.html')
-    
+#
+#  Add Entry  #
+#
 
-@app.route('/entry/add', methods=['POST'])
+@app.route("/entry/add", methods=["GET"])
+@login_required  # Force authentication
+def add_entry_get():
+    return render_template("add_entry.html")
+
+@app.route("/entry/add", methods=["POST"])
+@login_required  # Force authentication
 def add_entry_post():
     entry = Entry(
-        title=request.form['title'],
-        content=request.form['content'],
+        title=request.form["title"],
+        content=request.form["content"],
+        author=current_user
     )
     session.add(entry)
     session.commit()
-    return redirect(url_for('entries'))
+    return redirect(url_for("entries"))
     
-@app.route('/entry/<int:id>/delete_it') 
+#
+#  Delete Entry  #
+#    
+    
+@app.route("/entry/<int:id>/delete_it") 
+@login_required  # Force authentication
 def delete_entry_page(id):
     entry = session.query(Entry).filter(Entry.id == id).one()  # Locate specific entry
-    return render_template('delete_entry.html', entry=entry)
+    
+    if not all([entry.author, current_user]) or entry.author.id != current_user.id:
+        flash("Only the author can delete.", "danger")
+        return redirect( url_for("entries")) # Show the entry
+    
+    return render_template("delete_entry.html", entry=entry)
 
-@app.route('/entry/<int:id>/delete')
+@app.route("/entry/<int:id>/delete")
+@login_required  # Force authentication
 def delete_entry(id):
     """Delete an existing entry"""
     entry = session.query(Entry).filter(Entry.id == id).one()  # Locate specific entry
+    
+    if not all([entry.author, current_user]) or entry.author.id != current_user.id:
+        flash("Only the author can delete.", "danger")
+        return redirect( url_for("entries")) # Show the entry
+    
     session.delete(entry)  # Delete specified entry
     session.commit()  # Update database
-    return redirect(url_for('entries'))  # Return to entries page
+    return redirect(url_for("entries"))  # Return to entries page
+    
+#
+#  User signup  #
+#
+
+
+@app.route("/signup", methods=["GET"])
+def signup_get():
+    return render_template("signup.html")
+   
+@app.route("/signup", methods=["POST"])
+def signup_post():
+    
+    name=request.form["name"]
+    email=request.form["email"]
+    password=request.form["password"]
+    password_2=request.form["repassword"]
+    
+    if session.query(User).filter_by(email=email).first():
+        flash("User with that email address already exists", "danger")
+        return redirect(url_for("signup_get"))
+    
+    if len(password and password_2) < 8 or password != password_2:
+        flash("Passwords did not match", "danger")
+        return redirect(url_for("signup_get"))
+    
+    user = User(name=name, 
+    email=email, 
+    password=generate_password_hash(password))
+                
+    session.add(user)
+    session.commit()
+    login_user(user)
+    
+    flash("You are now a user!", "info")
+    return redirect(request.args.get('next') or url_for("entries"))
+    
+    
+#
+#  User Login  #
+#    
+    
+    
+@app.route("/login", methods=["GET"])
+def login_get():
+    return render_template("login.html")
+
+@app.route("/login", methods=["POST"])
+def login_post():
+    email = request.form["email"]
+    password = request.form["password"]
+    user = session.query(User).filter_by(email=email).first()
+    if not user or not check_password_hash(user.password, password):
+        flash("Incorrect username or password", "danger")
+        return redirect(url_for("login_get"))
+
+    login_user(user)
+    return redirect(request.args.get('next') or url_for("entries"))
+    
+#
+#  Logout  #
+#     
+
+@app.route("/logout")
+@login_required  # Force authentication
+def logout():
+    """Log user out of system"""
+    logout_user()
+    flash("You have been logged out", "danger")
+    return redirect(url_for("login_get"))
