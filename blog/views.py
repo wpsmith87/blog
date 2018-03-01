@@ -42,6 +42,7 @@ def entries(page=1):
     total_pages = (count - 1) // PAGINATE_BY + 1  # Total number of pages
     has_next = page_index < total_pages - 1  # Does following page exit?
     has_prev = page_index > 0  # Does previous page exist?
+    
 
     entries = session.query(Entry)
     entries = entries.order_by(Entry.datetime.desc())
@@ -56,11 +57,13 @@ def entries(page=1):
                            )
                            
 
+
 #
 #  View Single Entry  #
 #
     
 @app.route("/entry/<int:id>")
+@login_required
 def blog_entry(id):
     """
     Find a specific blog entry and display it.
@@ -68,7 +71,9 @@ def blog_entry(id):
     :return: Template page displaying the specified blog entry
     """
     entry = session.query(Entry).filter(Entry.id == id).one()  # Locate specific entry
-    return render_template("blog_entry.html", entry=entry)  # Show the entry
+    if not all([entry.author, current_user]) or entry.author.id != current_user.id:
+        return render_template("blog_entry.html", entry=entry)  # Show the entry
+    return render_template("author_blog_entry.html", entry=entry)  # Show the entry
 
 #
 #  Edit Entry  #
@@ -87,7 +92,6 @@ def edit_post_get(id):
     if not all([entry.author, current_user]) or entry.author.id != current_user.id:
         flash("Only the author can edit.", "danger")
         return redirect(url_for("entries"))
-        
     return render_template("edit_post.html", entry=entry) # Edit entry
 
 @app.route("/entry/<int:id>/edit", methods=['POST'])

@@ -1,10 +1,8 @@
-{% import "macros.html" as macros %}
+{% import "author_macro.html" as macros %}
 {% extends "base.html" %}
 {% block content %}
 
-{% for entry in entries %}
 {{ macros.render_entry(entry) }}
-{% endfor %}
 
 <ul class="pager">
     {% if has_next %}
@@ -12,7 +10,6 @@
     <a href="{{ url_for('entries', page=page + 1) }}">&larr; Older</a>
     </li>
     {% endif %}
-    
     {% if has_prev %}
     <li class="next">
     <a href="{{ url_for('entries', page=page - 1) }}">&rarr; Newer</a>
