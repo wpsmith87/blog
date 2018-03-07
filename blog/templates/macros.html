@@ -6,7 +6,8 @@
         </h5>
         <ul class="list-unstyled">
             <li>
-                <h5>{{ entry.datetime | dateformat("%d/%m/%y") }}</h5>
+                <h5>{{ entry.datetime | dateformat("%x") }}</h5>
+                <h5>{{ entry.datetime | dateformat("%X") }}</h5>
             </li>
         </ul>
     </div>
